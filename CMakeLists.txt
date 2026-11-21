@@ -60,7 +60,11 @@ endif()
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 20)
+if(SIMPSONS_UWP)
+	set(CMAKE_CXX_STANDARD 17)    # (C++/CX, /ZW: SDL's WinRT code and its main, which C++20 refuses)
+else()
+	set(CMAKE_CXX_STANDARD 20)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Every executable lands in build/bin (SIMPSONS_BIN_DIR), whatever the generator or configuration
