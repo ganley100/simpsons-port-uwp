@@ -1,0 +1,49 @@
+# Name:        xbox.yml
+# Description: builds the UWP packages for the Xbox in Developer Mode (ports/uwp/uwp.cmake) on a clean Windows machine
+#              with no ROM set: The Simpsons Mr. Plow Edition's and The Simpsons Arcade Game's .msix, signed with a key
+#              made for the run, with their .cer and Visual C++'s runtime package, and docs/package/README-xbox.txt
+# Version:     0.1.0
+# Created:     21-11-2026
+# Modified:    21-11-2026
+name: xbox
+
+on:
+  push:
+    branches: [main, testing, 'claude/**']
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SIMPSONS_VERSION_SUFFIX: ${{ github.ref == 'refs/heads/testing' && format('-TEST{0}', github.run_number) || '' }}
+
+jobs:
+  uwp:
+    name: xbox-uwp-x64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Configure
+        run: cmake -S . -B build/uwp -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 -DSIMPSONS_REFERENCE_TOOLS=OFF
+
+      - name: Build
+        run: cmake --build build/uwp --config Release --target simpsons_uwp_games --parallel
+
+      - name: Pack
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/simpsons-xbox | Out-Null
+          Copy-Item -Recurse build/bin/uwp/packages/* dist/simpsons-xbox/
+          Copy-Item docs/package/README-xbox.txt dist/simpsons-xbox/README.txt
+          Copy-Item LICENSE dist/simpsons-xbox/LICENSE.txt
+          Get-ChildItem -Recurse dist/simpsons-xbox | Select-Object FullName, Length
+          Compress-Archive -Path dist/simpsons-xbox -DestinationPath dist/simpsons-xbox-uwp-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simpsons-xbox-uwp-x64
+          path: dist/simpsons-xbox-uwp-x64.zip

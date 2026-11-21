@@ -78,6 +78,13 @@
  *    shows as the app's own (device_folder), where what the game keeps and its log are too; the app going to the
  *    background pauses a game and draws nothing there. The home gesture leaves it (SIMPSONS_SYSTEM_EXIT).
  *
+ *    On the Xbox (ports/uwp: a UWP app, for the console's Developer Mode, and Windows 10 and 11 alike; __WINRT__) as
+ *    on the Switch: the TV's screen whole, The Simpsons' WIDE AUTO by its shape, each controller a player and OPTIONS >
+ *    CONTROLS binding their buttons (SIMPSONS_DEVICE_CONTROLS). The pack is the package's own (uwp.cmake puts
+ *    SIMPSONS_BIN_DIR/simpsons.assets in, where this build has it), else the app's LocalState folder's (device_folder:
+ *    Device Portal's File explorer, LocalAppData > the package > LocalState), made there of the player's simpsons.zip;
+ *    what the game keeps and its log are there too. The controller's B is a button, never the system's back.
+ *
  *    --script plays a control script (runtime/include/simpsons/script.h) instead of the keyboard, to its end;
  *    --fast runs without waiting for the frames' time. --slow MS makes each frame drawn take MS milliseconds more,
  *    as a slow device's, and says on the standard error every 600 frames how the pace held: the frames a second (the
@@ -162,6 +169,16 @@
 #include <SDL_syswm.h>     /* (the UIWindow, for its safe area: ios_side_inset) */
 #include <objc/message.h>
 #include <objc/runtime.h>
+#endif
+
+#ifdef __WINRT__
+#include <SDL_system.h>    /* (SDL_WinRTGetFSPathUTF8: the package's LocalState, uwp_local_folder) */
+/* (the Xbox controller's B comes as SDLK_AC_BACK too, the system's back: not the menus' back nor the pause there) */
+#define CASE_AC_BACK
+#define AC_BACK_IS_BACK     0
+#else
+#define CASE_AC_BACK        case SDLK_AC_BACK:
+#define AC_BACK_IS_BACK     1
 #endif
 
 #include <inttypes.h>
@@ -1327,7 +1344,7 @@ static void action_key(SDL_Keycode key)
 		case SDLK_DOWN: actions_pressed |= ACTION_BIT(ACTION_DOWN); break;
 		case SDLK_LEFT: actions_pressed |= ACTION_BIT(ACTION_LEFT); break;
 		case SDLK_RIGHT: actions_pressed |= ACTION_BIT(ACTION_RIGHT); break;
-		case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_AC_BACK: actions_pressed |= ACTION_BIT(ACTION_BACK); break;
+		case SDLK_ESCAPE: case SDLK_BACKSPACE: CASE_AC_BACK actions_pressed |= ACTION_BIT(ACTION_BACK); break;
 		case SDLK_RETURN: case SDLK_KP_ENTER: actions_pressed |= ACTION_BIT(ACTION_START); break;
 		default: break;
 	}
@@ -1415,7 +1432,7 @@ static void read_events(void)
 				}
 				if (!(event.key.keysym.mod & KMOD_ALT))    /* (Alt+Enter: the full screen alone) */
 					action_key(event.key.keysym.sym);
-				if ((event.key.keysym.sym == SDLK_ESCAPE || event.key.keysym.sym == SDLK_AC_BACK) && console_can_pause())
+				if ((event.key.keysym.sym == SDLK_ESCAPE || (event.key.keysym.sym == SDLK_AC_BACK && AC_BACK_IS_BACK)) && console_can_pause())
 					pause_requested = true;
 #else
 				if (event.key.keysym.sym == SDLK_ESCAPE)
@@ -1829,7 +1846,7 @@ static uint32_t pause_events(void)
 						else
 							pressed |= ACTION_BIT(ACTION_ACCEPT);
 						break;
-					case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_AC_BACK: pressed |= PAUSE_BACK; break;
+					case SDLK_ESCAPE: case SDLK_BACKSPACE: CASE_AC_BACK pressed |= PAUSE_BACK; break;
 					case SDLK_F11: toggle_full_screen(); break;
 					case SDLK_F3: next_pixels(); break;
 					default: break;
@@ -2579,6 +2596,21 @@ static void on_frame_done(void)
 
 /* ---- the start ---- */
 
+#ifdef __WINRT__
+/* The package's LocalState folder with its separator (SDL's path of it, in UTF-8: the C library's files take it, a
+   UWP app's own folder): the ROM set, the pack, what the game keeps, its log. The caller frees it (SDL_free) */
+static char *uwp_local_folder(void)
+{
+	const char *local = SDL_WinRTGetFSPathUTF8(SDL_WINRT_PATH_LOCAL_FOLDER);
+	const size_t length = local ? strlen(local) + 2 : 1;
+	char *folder = SDL_malloc(length);
+
+	if (folder)
+		snprintf(folder, length, "%s%s", local ? local : "", local && local[0] ? "\\" : "");
+	return folder;
+}
+#endif
+
 /* Where the game keeps what it writes (its settings, its controls, its EEPROM, its log): beside the executable on
    Windows; elsewhere the user's own folder for the game (SDL_GetPrefPath: ~/.local/share/The Simpsons,
    ~/Library/Application Support/The Simpsons), as the executable's may not be written, unless a portable.txt beside
@@ -2592,6 +2624,8 @@ static char *saves_folder(void)
 	return SDL_GetPrefPath("", SAVES_NAME);    /* (the app's own folder, its internal storage: tmnt-port's) */
 #elif defined(__APPLE__) && TARGET_OS_IOS
 	return ios_documents();    /* (the app's Documents, the Files app's: the player can see and keep them) */
+#elif defined(__WINRT__)
+	return uwp_local_folder();    /* (the package's own LocalState: its installed folder is read-only) */
 #elif defined(_WIN32) || defined(SIMPSONS_HANDHELD)
 	return SDL_GetBasePath();
 #else
@@ -2669,7 +2703,15 @@ static void open_log(void)
 		SDL_free(documents);
 	}
 #endif
-#ifdef _WIN32
+#ifdef __WINRT__
+	{
+		/* (a UWP app's standard error reaches no one: the log in its LocalState, beside the ROM set) */
+		char *local = uwp_local_folder();
+
+		log_into(local ? local : "");
+		SDL_free(local);
+	}
+#elif defined(_WIN32)
 	if (_fileno(stderr) < 0)
 	{
 		char *saves = saves_folder();
@@ -2804,6 +2846,8 @@ static char *device_folder(void)
 	return folder;
 #elif defined(__APPLE__) && TARGET_OS_IOS
 	return ios_documents();    /* (the app's Documents: the Files app's, each game's own) */
+#elif defined(__WINRT__)
+	return uwp_local_folder();    /* (the package's LocalState: Device Portal's File explorer reaches it) */
 #else
 	return SDL_GetBasePath();
 #endif
@@ -2866,6 +2910,12 @@ static bool device_assets(char *found, size_t size, char *problem, size_t proble
 				"in this game's folder, in the Files app: On My iPhone (On My iPad) > " TITLE ". From a computer: Finder "
 				"(or the Apple Devices app on Windows), the device, Files, " TITLE ". Then start the game again: the "
 				"first start makes the game's assets of it (a few seconds).", stale);
+#elif defined(__WINRT__)
+			/* (the folder as the player reaches it on an Xbox: Device Portal, from a computer's browser) */
+			snprintf(problem, problem_size, "%sNo ROM set: put " ROM_SET_FILE " (MAME's simpsons set, 4 Players World) "
+				"in this app's LocalState folder: on the Xbox, Device Portal (its address in Dev Home) > File explorer "
+				"> LocalAppData > this game's package > LocalState > Upload. Then start the game again: the first start "
+				"makes the game's assets of it (a few seconds). The folder: %s", stale, place);
 #else
 			snprintf(problem, problem_size, "%sNo ROM set: put " ROM_SET_FILE " (MAME's simpsons set, 4 Players World) "
 				"in %s and start the game again. The first start makes the game's assets of it (a few seconds).", stale,
@@ -2981,6 +3031,26 @@ static bool find_assets(char *found, size_t size, const char **problem)
 			return true;
 		}
 		fprintf(stderr, "%s: %s\n", found, failed);    /* (another version's: the device's folder's, if any) */
+	}
+#endif
+#ifdef __WINRT__
+	{
+		/* (the package's own pack, put in by uwp.cmake where the build had the player's: the installed folder) */
+		char *base = SDL_GetBasePath();
+
+		snprintf(found, size, "%s" GAME_ASSETS_PACK_FILE, base ? base : "");
+		SDL_free(base);
+		if (exists(found))
+		{
+			const char *failed = game_load(found);
+
+			if (!failed)
+			{
+				fprintf(stderr, "Assets: %s\n", found);
+				return true;
+			}
+			fprintf(stderr, "%s: %s\n", found, failed);    /* (another version's: LocalState's, if any) */
+		}
 	}
 #endif
 #ifdef __ANDROID__
@@ -3353,6 +3423,11 @@ int main(int argc, char **argv)
 	   renderer's output, its pixels; the first run's window keeps its layout, first_run.c) */
 	SDL_SetHint(SDL_HINT_WINDOWS_DPI_SCALING, "1");
 #endif
+#ifdef __WINRT__
+	/* (the Xbox controller's B is the system's back too: marked handled, so the app is never sent away by it; its key,
+	   SDLK_AC_BACK, is not the menus' back here, as the controller's B already is what CONTROLS makes it) */
+	SDL_SetHint(SDL_HINT_WINRT_HANDLE_BACK_BUTTON, "1");
+#endif
 #ifdef __ANDROID__
 	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");    /* (back is the menus' back and the pause, never the end) */
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");          /* (fingers are the touch controls, not the mouse) */
@@ -3486,6 +3561,10 @@ int main(int argc, char **argv)
 	/* (the phone's whole screen: full screen is SDL's immersive mode, the system's bars hidden. A window would leave
 	   them over the picture, Android 15 drawing the app under them: tmnt-port's player's OnePlus 12, the score cut) */
 	window = SDL_CreateWindow(TITLE, 0, 0, 1280, 720, SDL_WINDOW_FULLSCREEN_DESKTOP);
+#elif defined(__WINRT__)
+	(void)scale;
+	/* (the TV's whole screen at its own pixels: the Xbox's 1920 x 1080 swap chain, a computer's whole window) */
+	window = SDL_CreateWindow(TITLE, 0, 0, 1920, 1080, SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_ALLOW_HIGHDPI);
 #elif defined(__APPLE__) && TARGET_OS_IOS
 	(void)scale;
 	/* (the whole screen at its own pixels (ALLOW_HIGHDPI: the touch controls' size by the screen's density, touch.c,

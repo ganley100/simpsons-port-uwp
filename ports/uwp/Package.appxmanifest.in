@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The UWP package's manifest (ports/uwp/uwp.cmake configures it for each game): one app on the Xbox in Developer
+     Mode and on Windows 10 and 11, its tiles ports/uwp/Assets (make_logos.py's). The publisher is the key's that
+     signs it (make_key.ps1); the Executable and the EntryPoint Visual Studio's tokens. Networking for The Simpsons'
+     LAN game where the build has it (SIMPSONS_UWP_LAN) -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  IgnorableNamespaces="uap mp">
+
+  <Identity Name="@SIMPSONS_UWP_IDENTITY@" Publisher="@SIMPSONS_UWP_PUBLISHER@" Version="@SIMPSONS_UWP_VERSION@" />
+
+  <mp:PhoneIdentity PhoneProductId="@SIMPSONS_UWP_GUID@" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+
+  <Properties>
+    <DisplayName>@SIMPSONS_UWP_NAME@</DisplayName>
+    <PublisherDisplayName>The Simpsons port</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="@SIMPSONS_UWP_NAME@"
+        Description="@SIMPSONS_UWP_NAME@: the decompiled arcade game, with your own ROM set"
+        BackgroundColor="#FFD90F"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#FFD90F" />
+        <uap:InitialRotationPreference>
+          <uap:Rotation Preference="landscape" />
+        </uap:InitialRotationPreference>
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>@SIMPSONS_UWP_CAPABILITIES@
+  </Capabilities>
+</Package>
